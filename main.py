@@ -1,36 +1,42 @@
-import logging
+import os
+from telegram import Update, ForceReply
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
 import openai
-from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
+from dotenv import load_dotenv
 
-# 🔑 Replace with your actual OpenAI API key and Telegram Bot token
-OPENAI_API_KEY = "sk-xxxx"
-BOT_TOKEN = "your_telegram_bot_token"
+load_dotenv()
 
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 openai.api_key = OPENAI_API_KEY
-logging.basicConfig(level=logging.INFO)
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Hey! I'm your ChatGPT bot. Just send a message and I'll reply!")
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user = update.effective_user
+    await update.message.reply_html(
+        rf"Hi {user.mention_html()}! I'm your ChatGPT-powered bot. Send me a message!",
+        reply_markup=ForceReply(selective=True),
+    )
 
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_input = update.message.text
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user_message = update.message.text
     try:
         response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",  # Or gpt-4 if you have access
-            messages=[{"role": "user", "content": user_input}],
-            temperature=0.7
+            model="gpt-3.5-turbo",
+            messages=[{"role": "user", "content": user_message}]
         )
-        bot_reply = response["choices"][0]["message"]["content"]
-        await update.message.reply_text(bot_reply)
+        bot_reply = response['choices'][0]['message']['content']
     except Exception as e:
-        await update.message.reply_text(f"Error: {e}")
+        bot_reply = f"Error from OpenAI: {e}"
 
-def main():
+    await update.message.reply_text(bot_reply)
+
+if __name__ == '__main__':
+    if not BOT_TOKEN or not OPENAI_API_KEY:
+        raise ValueError("Missing BOT_TOKEN or OPENAI_API_KEY")
+
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    app.run_polling()
 
-if __name__ == "__main__":
-    main()
+    print("Bot is running...")
+    app.run_polling()
